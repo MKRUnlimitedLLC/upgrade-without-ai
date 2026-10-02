@@ -74,7 +74,16 @@ try {
     Write-Log ("Recall feature was not restored: {0}" -f $_.Exception.Message)
 }
 
+$restoredMarker = Join-Path $logDir "user-restored.marker"
+Set-Content -Path $restoredMarker -Value ("Restored {0}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss")) -Encoding UTF8
+if (Test-Path $restoredMarker) {
+    Write-Log "Wrote user-restored marker. The post-update watcher stays quiet until Upgrade without AI is applied again."
+} else {
+    Write-Log "Could not write user-restored marker. The watcher may keep reporting drift."
+}
+
 Write-Log "Policy values removed. Copilot was not reinstalled."
 Write-Host ""
 Write-Host "Restart Windows. To get Copilot back, install Microsoft Copilot from the Store."
+Write-Host "The post-update watcher stays quiet until Upgrade without AI is applied again."
 Write-Host "Log: $log"
