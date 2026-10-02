@@ -757,8 +757,8 @@ Describe "launch readiness" {
 
         foreach ($row in $expected) {
             $text = Get-Content -LiteralPath (Join-Path $script:RepoRoot $row.Bat) -Raw
-            $text | Should -Match [regex]::Escape($row.Script)
-            $text | Should -Match '%~dp0'
+            $text.Contains($row.Script) | Should -BeTrue
+            $text.Contains("%~dp0") | Should -BeTrue
             foreach ($extra in @($row.Also)) {
                 if ([string]::IsNullOrEmpty($extra)) { continue }
                 $text.Contains($extra) | Should -BeTrue
