@@ -489,6 +489,7 @@ Describe "prompt text" {
         $text | Should -Match "OneDrive Summarize"
         $text | Should -Match "Click Yes"
         $text | Should -Match "RestoreWindowsAI\.bat"
+        $text | Should -Match "CheckWindowsAI\.bat"
         $text | Should -Match "example drift"
         $text | Should -Not -Match "Phi Silica is removed"
         $text | Should -Not -Match "removed Phi Silica"
@@ -525,6 +526,51 @@ Describe "check report" {
         $decision.Reason | Should -Be "Clean"
         ($lines -join "`n").Contains("Nothing this tool turns off is back on.") | Should -BeTrue
         ($lines -join "`n").Contains("Reason=") | Should -BeFalse
+    }
+}
+
+Describe "manual settings steps" {
+    It "explains each item this tool cannot switch and how to turn it on or off" {
+        $items = @(Get-WindowsAIManualItems)
+        $titles = @($items | ForEach-Object { $_.Title })
+        $titles | Should -Contain "File Explorer AI actions"
+        $titles | Should -Contain "Experimental agentic features"
+        $titles | Should -Contain "OneDrive Summarize"
+        $titles | Should -Contain "Phi Silica and other on-device models"
+        $titles | Should -Contain "Windows settings backup on a work PC"
+
+        $report = Format-WindowsAIManualReport
+        $report | Should -Match "Still manual"
+        $report | Should -Match "Select Apps, then Actions"
+        $report | Should -Match "Select System, then AI components"
+        $report | Should -Match "Select Accounts, then Windows backup"
+        $report | Should -Match "Remember my preferences"
+        $report | Should -Match "does not have a registry setting"
+        $report | Should -Match "This tool does not remove Phi Silica"
+        $report | Should -Not -Match "Phi Silica is removed"
+        $report | Should -Not -Match "removed Phi Silica"
+        $report | Should -Not -Match "Set-Dword"
+
+        foreach ($item in $items) {
+            $item.WhatItDoes.Length | Should -BeGreaterThan 20
+            @($item.TurnOff).Count | Should -BeGreaterThan 0
+            @($item.TurnOn).Count | Should -BeGreaterThan 0
+            $report.Contains($item.WhatItDoes) | Should -BeTrue
+            $report.Contains("Turn off:") | Should -BeTrue
+            $report.Contains("Turn on:") | Should -BeTrue
+        }
+
+        $readme = Get-Content -LiteralPath (Join-Path $script:RepoRoot "README.md") -Raw
+        $watch = Get-Content -LiteralPath (Join-Path $script:RepoRoot "Watch-WindowsAI.ps1") -Raw
+        $disable = Get-Content -LiteralPath (Join-Path $script:RepoRoot "Disable-WindowsAI.ps1") -Raw
+        $readme.Contains("## Still manual") | Should -BeTrue
+        $readme.Contains("Select Apps, then Actions.") | Should -BeTrue
+        $readme.Contains("does not have a registry setting that turns it off.") | Should -BeTrue
+        $readme.Contains("This tool does not remove Phi Silica.") | Should -BeTrue
+        $readme | Should -Not -Match "Phi Silica is removed"
+        $watch.Contains("Format-WindowsAIManualReport") | Should -BeTrue
+        $disable.Contains("Format-WindowsAIManualReport") | Should -BeTrue
+        $disable.Contains("Set-Dword") | Should -BeTrue
     }
 }
 
