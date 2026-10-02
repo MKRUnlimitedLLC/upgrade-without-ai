@@ -38,7 +38,7 @@ A burst of update notices only checks once. Signing in after an update still che
 
 On Home, some settings never stay off. You may see the same reminder after updates. Double-click `UninstallWindowsAIWatcher.bat` if you do not want it.
 
-To check now, double-click `CheckWindowsAI.bat`. Nothing to report exits 0. Something back on exits 2. The log is `%LOCALAPPDATA%\UpgradeWithoutAI\watcher.log`.
+To check now, double-click `CheckWindowsAI.bat`. The window says whether anything this tool turns off is back on. Nothing to report exits 0. Something back on exits 2. The log is `%LOCALAPPDATA%\UpgradeWithoutAI\watcher.log`.
 
 The check looks at your signed-in account. It does not ask for admin approval to look. Yes on the message is what runs the full turn-off script.
 
