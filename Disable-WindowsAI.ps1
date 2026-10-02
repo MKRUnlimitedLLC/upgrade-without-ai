@@ -173,11 +173,12 @@ if ($failed.Count -eq 0) {
 Write-Host ""
 Write-Host "Sign out or restart. This script does not restart Explorer, because doing that from the admin prompt can leave Explorer running as admin."
 Write-Host "Log: $log"
-Write-Host ""
-Write-Host "Still manual, because Windows has no stable switch for them:"
-Write-Host "  Settings > Apps > Actions -> turn off File Explorer AI actions"
-Write-Host "  Settings > System > AI components -> Experimental agentic features Off"
-Write-Host "  OneDrive Summarize stays available while Microsoft 365 Copilot is signed in"
-Write-Host ""
+$common = Join-Path $PSScriptRoot "WindowsAI.Common.ps1"
+if (Test-Path -LiteralPath $common) {
+    . $common
+    Write-Host ""
+    Write-Host (Format-WindowsAIManualReport)
+    Write-Host ""
+}
 if ($failed.Count -gt 0) { exit 1 }
 exit 0

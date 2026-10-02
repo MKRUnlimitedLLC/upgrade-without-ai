@@ -62,6 +62,10 @@ if (-not $dotSourced) {
         Write-Host $_.Exception.Message
         exit 1
     }
+    if ($Source -eq "Manual" -and -not $Quiet) {
+        Write-Host ""
+        Write-Host (Format-WindowsAIManualReport)
+    }
     if ($PassThru) {
         $decision | ConvertTo-Json -Depth 6
     }

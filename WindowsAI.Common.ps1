@@ -94,6 +94,107 @@ function Get-WindowsAIWatchReportLine {
     }
 }
 
+function Get-WindowsAIManualItems {
+    # Items this tool cannot flip. Descriptions and Settings steps only.
+    # No registry values are invented here.
+    return @(
+        [pscustomobject]@{
+            Title = "File Explorer AI actions"
+            WhatItDoes = "When this is on, right-clicking a file in File Explorer can offer an AI action, such as editing a photo or summarizing a document, without opening the file first."
+            TurnOff = @(
+                "Press Windows+I to open Settings."
+                "Select Apps, then Actions."
+                "Turn off each action you do not want. If every action is off, File Explorer stops offering those AI actions."
+            )
+            TurnOn = @(
+                "Press Windows+I to open Settings."
+                "Select Apps, then Actions."
+                "Turn on the actions you want. They come back when you right-click a file those actions support."
+            )
+        }
+        [pscustomobject]@{
+            Title = "Experimental agentic features"
+            WhatItDoes = "When this is on, an agent such as Copilot Actions can work in its own window and use your apps and common folders, such as Documents and Desktop, while you keep using the PC. It stays off unless an administrator turns it on, and then it is on for every account on the PC."
+            TurnOff = @(
+                "Press Windows+I to open Settings."
+                "Select System, then AI components."
+                "Turn off Experimental agentic features."
+            )
+            TurnOn = @(
+                "Sign in with an administrator account."
+                "Press Windows+I to open Settings."
+                "Select System, then AI components."
+                "Turn on Experimental agentic features. If Windows asks you to confirm, choose Turn on."
+            )
+        }
+        [pscustomobject]@{
+            Title = "OneDrive Summarize"
+            WhatItDoes = "When you are signed in with Microsoft 365 Copilot, OneDrive can write a short summary of a Word, Excel, PowerPoint, or PDF file. You ask for it from the Copilot button or the OneDrive menu. Windows has no Settings switch for Summarize alone, and this tool does not have a registry setting that turns it off."
+            TurnOff = @(
+                "Do not choose Summarize or Summarize this file in OneDrive or File Explorer."
+                "Sign out of the Microsoft 365 Copilot account if you do not want those summaries offered. They stay available while that account is signed in."
+                "On a work or school account, an administrator can turn off Copilot for OneDrive and SharePoint in the Microsoft 365 admin center. That is not a switch in Windows Settings."
+            )
+            TurnOn = @(
+                "Sign in to OneDrive with the Microsoft 365 account that includes Copilot."
+                "Select a supported file, open Copilot or the OneDrive menu, and choose Summarize."
+            )
+        }
+        [pscustomobject]@{
+            Title = "Phi Silica and other on-device models"
+            WhatItDoes = "Phi Silica is a language model that runs on the PC for some Copilot+ features. This tool does not remove Phi Silica. Other on-device pieces, such as image generation, may show up on the same Settings page. Some of them are part of Windows and have no Uninstall button."
+            TurnOff = @(
+                "Press Windows+I to open Settings."
+                "Select System, then AI components."
+                "If a downloaded model shows Uninstall, you can uninstall that model yourself and restart. If Phi Silica has no Uninstall button, Windows is keeping that model and this tool cannot remove it."
+            )
+            TurnOn = @(
+                "Press Windows+I to open Settings."
+                "Select System, then AI components."
+                "If Windows shows an install button for a model you removed, use that button. If there is no button, Windows manages the model and this tool cannot turn it back on."
+            )
+        }
+        [pscustomobject]@{
+            Title = "Windows settings backup on a work PC"
+            WhatItDoes = "On a work PC signed in with Microsoft Entra, Windows can save your settings and put them on another PC. When that backup is on, a new PC can come back with the old preferences. An administrator decides whether backup is allowed. This tool does not change that policy."
+            TurnOff = @(
+                "Press Windows+I to open Settings."
+                "Select Accounts, then Windows backup."
+                "Turn off Remember my preferences if the switch is there. If the switch is missing or grayed out, your administrator controls it."
+            )
+            TurnOn = @(
+                "Press Windows+I to open Settings."
+                "Select Accounts, then Windows backup."
+                "Turn on Remember my preferences if Windows lets you. If the switch is missing, ask your administrator."
+            )
+        }
+    )
+}
+
+function Format-WindowsAIManualReport {
+    $lines = New-Object System.Collections.Generic.List[string]
+    [void]$lines.Add("Still manual. This tool cannot switch these. You can.")
+    [void]$lines.Add("")
+    foreach ($item in @(Get-WindowsAIManualItems)) {
+        [void]$lines.Add($item.Title)
+        [void]$lines.Add($item.WhatItDoes)
+        [void]$lines.Add("Turn off:")
+        $number = 1
+        foreach ($step in @($item.TurnOff)) {
+            [void]$lines.Add(("{0}. {1}" -f $number, $step))
+            $number++
+        }
+        [void]$lines.Add("Turn on:")
+        $number = 1
+        foreach ($step in @($item.TurnOn)) {
+            [void]$lines.Add(("{0}. {1}" -f $number, $step))
+            $number++
+        }
+        [void]$lines.Add("")
+    }
+    return ($lines -join [Environment]::NewLine)
+}
+
 function Get-WindowsAISettingLabel {
     param([string]$Name)
     switch ($Name) {
@@ -428,6 +529,7 @@ function Get-WindowsAIDriftPromptText {
     [void]$lines.Add("")
     [void]$lines.Add("Click Yes to run Upgrade without AI again. Windows will ask for administrator approval.")
     [void]$lines.Add("This does not turn off Defender or Windows Update, and it does not remove Phi Silica or OneDrive Summarize.")
+    [void]$lines.Add("CheckWindowsAI.bat explains the items this tool cannot switch, and the Settings steps to turn each one on or off yourself.")
     [void]$lines.Add("")
     [void]$lines.Add("Click No to be reminded tomorrow. To leave them on and stop these reminders, double-click RestoreWindowsAI.bat.")
     return ($lines -join [Environment]::NewLine)
