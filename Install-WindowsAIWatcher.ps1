@@ -120,8 +120,8 @@ $definitions = @(Get-WindowsAIWatcherTaskDefinition -ScriptRoot $PSScriptRoot)
 if ($Uninstall) {
     foreach ($def in $definitions) {
         Unregister-ScheduledTask -TaskName $def.TaskName -TaskPath $def.TaskPath -Confirm:$false -ErrorAction SilentlyContinue
-        Write-Host ("Removed {0}{1} if it was present." -f $def.TaskPath, $def.TaskName)
     }
+    Write-Host "Removed the after-update check, if it was installed."
     exit 0
 }
 
@@ -132,31 +132,31 @@ if (-not (Get-Command Register-ScheduledTask -ErrorAction SilentlyContinue)) {
 
 $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 $updateFailed = $false
+$installed = 0
 foreach ($def in $definitions) {
     try {
         Register-UpgradeWithoutAIWatcherTask -Definition $def -UserId $user
-        Write-Host ("Installed {0}{1} for {2}." -f $def.TaskPath, $def.TaskName, $user)
-        if ($def.Trigger.Kind -eq "WindowsUpdateInstalled") {
-            Write-Host "It runs after Windows Update event 19 (Installation successful), then waits 3 minutes."
-        }
+        $installed++
     } catch {
         if ($def.Trigger.Kind -eq "WindowsUpdateInstalled") {
             $updateFailed = $true
-            Write-Host ("Could not register the Windows Update event trigger: {0}" -f $_.Exception.Message)
-            Write-Host "Sign-in and daily checks will still be installed."
             continue
         }
-        Write-Host ("Could not install {0}: {1}" -f $def.TaskName, $_.Exception.Message)
+        Write-Host "Could not install the check. Try again from this folder."
         exit 1
     }
 }
 
-if ($updateFailed) {
-    Write-Host "The post-update event trigger is missing. Sign-in and daily checks are the fallback."
-}
-
 Write-Host ""
-Write-Host "A prompt appears only when a watched setting is back on."
-Write-Host "Restore Windows AI writes a marker that keeps the watcher quiet."
-Write-Host "Run UninstallWindowsAIWatcher.bat to remove these tasks."
+Write-Host "Installed the after-update check for $user."
+Write-Host "It runs after Windows Update, when you sign in, and once a day if those did not run."
+Write-Host "You only get a message when an AI feature this tool turns off is back on."
+Write-Host "Click Yes to turn it off again. Windows asks for administrator approval only then."
+if ($updateFailed) {
+    Write-Host "Windows did not allow a schedule right after an update. Sign-in and daily checks are still installed."
+} elseif ($installed -eq 0) {
+    Write-Host "Nothing was installed."
+    exit 1
+}
+Write-Host "Leave this folder where it is. Double-click UninstallWindowsAIWatcher.bat to remove the check."
 exit 0

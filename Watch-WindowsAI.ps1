@@ -30,7 +30,7 @@ function Show-WindowsAIDriftPrompt {
             "Upgrade without AI",
             [System.Windows.Forms.MessageBoxButtons]::YesNo,
             [System.Windows.Forms.MessageBoxIcon]::Warning,
-            [System.Windows.Forms.MessageBoxDefaultButton]::Button2
+            [System.Windows.Forms.MessageBoxDefaultButton]::Button1
         )
         if ($result -eq [System.Windows.Forms.DialogResult]::Yes) {
             return "Yes"

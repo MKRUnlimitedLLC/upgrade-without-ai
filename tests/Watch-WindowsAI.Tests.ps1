@@ -95,10 +95,12 @@ BeforeAll {
             -TestUserRestored { $capturedRestored }.GetNewClosure() `
             -ReadState { $capturedState }.GetNewClosure() `
             -WriteState {
-                param($Fingerprint, $LastNotifiedUtc)
+                param($Fingerprint, $LastNotifiedUtc, $LastCheckedUtc, $LastSource)
                 [void]$bag.StateWrites.Add([pscustomobject]@{
                     Fingerprint = $Fingerprint
                     LastNotifiedUtc = $LastNotifiedUtc
+                    LastCheckedUtc = $LastCheckedUtc
+                    LastSource = $LastSource
                 })
             }.GetNewClosure() `
             -WriteLog { param($Message) } `
@@ -166,7 +168,8 @@ Describe "drift detection" {
         $findings[0].Name | Should -Be "DisableAIDataAnalysis"
         $findings[0].Expected | Should -Be 1
         $findings[0].Actual | Should -BeNullOrEmpty
-        $findings[0].Message | Should -Match "missing"
+        $findings[0].Label | Should -Be "Recall snapshots"
+        $findings[0].Message | Should -Match "back on"
     }
 
     It "detects a policy value that is no longer the off value" {
@@ -197,6 +200,27 @@ Describe "drift detection" {
     It "does not treat a null package list as Copilot being installed" {
         $findings = @(Get-WindowsAIFindings -GetPolicyValue (New-PolicyReader -Values (Get-CleanPolicyValues)) -GetCopilotPackages { $null })
         $findings.Count | Should -Be 0
+    }
+
+    It "reads each registry key once" {
+        $script:KeyOpens = New-Object System.Collections.Generic.List[string]
+        $byPath = @{}
+        foreach ($policy in @(Get-WindowsAIExpectedPolicy)) {
+            if (-not $byPath.ContainsKey($policy.Path)) {
+                $byPath[$policy.Path] = @{}
+            }
+            $byPath[$policy.Path][$policy.Name] = [int]$policy.Value
+        }
+        $byPath["HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsAI"]["AllowRecallEnablement"] = 1
+        $findings = @(Get-WindowsAIFindings -GetPolicyKey {
+            param($Path)
+            [void]$script:KeyOpens.Add($Path)
+            return $byPath[$Path]
+        } -GetCopilotPackages { @() })
+        $script:KeyOpens.Count | Should -Be 6
+        @($script:KeyOpens | Select-Object -Unique).Count | Should -Be 6
+        @($findings | Where-Object { $_.Name -eq "AllowRecallEnablement" }).Count | Should -Be 1
+        $findings[0].Label | Should -Be "Recall"
     }
 
     It "reports a registry read error without inventing a value" {
@@ -243,7 +267,7 @@ Describe "when to notify" {
         $decision.Reason | Should -Be "Drift"
     }
 
-    It "suppresses the same update result inside the 3 hour burst window" {
+    It "does not ask again the same day about the same result" {
         $fingerprint = Get-WindowsAIFindingFingerprint -Findings @($script:SampleFinding)
         $decision = Get-WindowsAIWatchDecision `
             -Findings @($script:SampleFinding) `
@@ -257,20 +281,21 @@ Describe "when to notify" {
         $decision.ExitCode | Should -Be 2
     }
 
-    It "notifies again from the update task after the burst window" {
+    It "asks again the day after the same result was shown" {
         $fingerprint = Get-WindowsAIFindingFingerprint -Findings @($script:SampleFinding)
         $decision = Get-WindowsAIWatchDecision `
             -Findings @($script:SampleFinding) `
             -UserRestored $false `
             -NowUtc $script:Now `
             -LastFingerprint $fingerprint `
-            -LastNotifiedUtc $script:Now.AddHours(-4) `
+            -LastNotifiedUtc $script:Now.AddHours(-21) `
             -CooldownHours (Get-WindowsAIWatcherCooldownHours -Source "Update")
         $decision.ShouldNotify | Should -BeTrue
         $decision.Reason | Should -Be "Drift"
     }
 
-    It "keeps sign-in and daily reminders on the longer cooldown" {
+    It "uses one reminder window for every automatic check" {
+        (Get-WindowsAIWatcherCooldownHours -Source "Update") | Should -Be 20
         (Get-WindowsAIWatcherCooldownHours -Source "Logon") | Should -Be 20
         (Get-WindowsAIWatcherCooldownHours -Source "Daily") | Should -Be 20
         (Get-WindowsAIWatcherCooldownHours -Source "Manual") | Should -Be 0
@@ -376,8 +401,62 @@ Describe "one-click reapply" {
         $decision.ExitCode | Should -Be 0
         $script:TestWatch.Prompted | Should -BeFalse
         $script:TestWatch.ReapplyRoot | Should -BeNullOrEmpty
+        $script:TestWatch.StateWrites.Count | Should -Be 0
+    }
+
+    It "does not read the registry when Windows AI was restored" {
+        $script:PolicyCalls = 0
+        $script:PackageCalls = 0
+        $decision = Invoke-WatchForTest `
+            -UserRestored $true `
+            -GetPolicyValue { param($Path, $Name) $script:PolicyCalls++; return $null } `
+            -GetCopilotPackages { $script:PackageCalls++; return @() } `
+            -State ([pscustomobject]@{ Fingerprint = "old"; LastNotifiedUtc = "2026-06-01T00:00:00Z" }) `
+            -Prompt { param($Findings) throw "prompt should not run" }
+        $decision.Reason | Should -Be "UserRestored"
+        $script:PolicyCalls | Should -Be 0
+        $script:PackageCalls | Should -Be 0
         $script:TestWatch.StateWrites.Count | Should -Be 1
         $script:TestWatch.StateWrites[0].Fingerprint | Should -BeNullOrEmpty
+    }
+
+    It "skips a repeat update scan and still scans sign-in after an update" {
+        $now = [datetime]::Parse("2026-06-01T12:00:00Z")
+        $recentUpdate = [pscustomobject]@{
+            Fingerprint = "abc"
+            LastNotifiedUtc = $now.AddMinutes(-10).ToString("o")
+            LastCheckedUtc = $now.AddMinutes(-10).ToString("o")
+            LastSource = "Update"
+        }
+        (Test-WindowsAIShouldSkipScan -Source "Update" -LastCheckedUtc $recentUpdate.LastCheckedUtc -LastSource "Update" -NowUtc $now) | Should -BeTrue
+        (Test-WindowsAIShouldSkipScan -Source "Logon" -LastCheckedUtc $recentUpdate.LastCheckedUtc -LastSource "Update" -NowUtc $now) | Should -BeFalse
+        (Test-WindowsAIShouldSkipScan -Source "Daily" -LastCheckedUtc $recentUpdate.LastCheckedUtc -LastSource "Update" -NowUtc $now) | Should -BeTrue
+        (Test-WindowsAIShouldSkipScan -Source "Manual" -LastCheckedUtc $recentUpdate.LastCheckedUtc -LastSource "Update" -NowUtc $now) | Should -BeFalse
+
+        $script:PolicyCalls = 0
+        $skipped = Invoke-WatchForTest `
+            -Source "Update" `
+            -State $recentUpdate `
+            -NowUtc $now `
+            -GetPolicyValue { param($Path, $Name) $script:PolicyCalls++; return $null } `
+            -GetCopilotPackages { return @() } `
+            -Prompt { param($Findings) throw "prompt should not run" }
+        $skipped.Reason | Should -Be "Skipped"
+        $skipped.ExitCode | Should -Be 0
+        $script:PolicyCalls | Should -Be 0
+        $script:TestWatch.Prompted | Should -BeFalse
+        $script:TestWatch.StateWrites.Count | Should -Be 0
+
+        $script:PolicyCalls = 0
+        $afterUpdate = Invoke-WatchForTest `
+            -Source "Logon" `
+            -State $recentUpdate `
+            -NowUtc $now `
+            -GetPolicyValue { param($Path, $Name) $script:PolicyCalls++; return 0 } `
+            -GetCopilotPackages { return @() } `
+            -Prompt { param($Findings) "No" }
+        $script:PolicyCalls | Should -BeGreaterThan 0
+        $afterUpdate.Reason | Should -Not -Be "Skipped"
     }
 
     It "does not prompt during cooldown, and a quiet run does not start reapply" {
@@ -413,6 +492,14 @@ Describe "prompt text" {
         $text | Should -Match "example drift"
         $text | Should -Not -Match "Phi Silica is removed"
         $text | Should -Not -Match "removed Phi Silica"
+        $text.Contains("HKLM") | Should -BeFalse
+        $text.Contains("AppX") | Should -BeFalse
+
+        $deduped = Get-WindowsAIDriftPromptText -Findings @(
+            [pscustomobject]@{ Label = "Copilot"; Message = "machine" },
+            [pscustomobject]@{ Label = "Copilot"; Message = "user" }
+        )
+        @($deduped -split "`n" | Where-Object { $_ -eq "- Copilot" }).Count | Should -Be 1
     }
 }
 
@@ -481,10 +568,12 @@ Describe "watcher state" {
             New-Item -ItemType Directory -Path $temp | Out-Null
             $env:LOCALAPPDATA = $temp
             $when = [datetime]::Parse("2026-06-01T12:00:00Z")
-            Write-WindowsAIWatcherState -Fingerprint "abc" -LastNotifiedUtc $when
+            Write-WindowsAIWatcherState -Fingerprint "abc" -LastNotifiedUtc $when -LastCheckedUtc $when -LastSource "Logon"
             $state = Read-WindowsAIWatcherState
             $state.Fingerprint | Should -Be "abc"
+            $state.LastSource | Should -Be "Logon"
             ([datetime]$state.LastNotifiedUtc).ToUniversalTime() | Should -Be $when.ToUniversalTime()
+            ([datetime]$state.LastCheckedUtc).ToUniversalTime() | Should -Be $when.ToUniversalTime()
 
             Write-WindowsAIWatcherState -Fingerprint "" -LastNotifiedUtc $null
             (Test-Path -LiteralPath (Get-WindowsAIWatcherStatePath)) | Should -BeFalse
@@ -493,6 +582,44 @@ Describe "watcher state" {
             $env:LOCALAPPDATA = $old
             if (Test-Path -LiteralPath $temp) {
                 Remove-Item -LiteralPath $temp -Recurse -Force
+            }
+        }
+    }
+}
+
+Describe "check stays unelevated and public copy stays a report" {
+    It "does not elevate until UpgradeWithoutAI.bat runs, and does not list every app" {
+        $common = Get-Content -LiteralPath (Join-Path $script:RepoRoot "WindowsAI.Common.ps1") -Raw
+        $watch = Get-Content -LiteralPath (Join-Path $script:RepoRoot "Watch-WindowsAI.ps1") -Raw
+        $installer = Get-Content -LiteralPath (Join-Path $script:RepoRoot "Install-WindowsAIWatcher.ps1") -Raw
+        $common.Contains("-Verb RunAs") | Should -BeFalse
+        $common.Contains("-AllUsers") | Should -BeFalse
+        $watch.Contains("-Verb RunAs") | Should -BeFalse
+        $installer.Contains("RunLevel Limited") | Should -BeTrue
+        $installer.Contains("UninstallWindowsAIWatcher.bat") | Should -BeTrue
+    }
+
+    It "does not add paid, pricing, or store-listing language to public copy" {
+        $files = @(
+            "README.md",
+            "WindowsAI.Common.ps1",
+            "Watch-WindowsAI.ps1",
+            "Install-WindowsAIWatcher.ps1",
+            "InstallWindowsAIWatcher.bat",
+            "UninstallWindowsAIWatcher.bat",
+            "CheckWindowsAI.bat",
+            "UpgradeWithoutAI.bat",
+            "RestoreWindowsAI.bat",
+            "Disable-WindowsAI.ps1",
+            "Restore-WindowsAI.ps1"
+        )
+        # Task Scheduler uses a property named Subscription for the event query.
+        # That is not a paid plan. These phrases are the ones that must not appear.
+        $banned = @("pricing", "store listing", "buy now", "monetiz", "paid plan", "paid version", "paid subscription")
+        foreach ($file in $files) {
+            $text = (Get-Content -LiteralPath (Join-Path $script:RepoRoot $file) -Raw).ToLower()
+            foreach ($word in $banned) {
+                $text.Contains($word) | Should -BeFalse
             }
         }
     }

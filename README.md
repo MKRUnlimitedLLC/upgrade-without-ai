@@ -23,26 +23,24 @@ Sign out or restart after it finishes. It does not restart Explorer. Restarting 
 
 ## After Windows Update
 
-Windows Update can put these policy values back to defaults, or install the Copilot store app again. The watcher reads the same values `Disable-WindowsAI.ps1` writes. It also checks whether `Microsoft.Copilot` is installed. It does not turn updates or Defender off, and it does not remove Phi Silica or OneDrive Summarize.
+Windows Update can turn these AI features back on, or install the Copilot app again.
 
-1. Double-click `InstallWindowsAIWatcher.bat`.
-2. Leave this folder where it is. The tasks point at this copy of `Watch-WindowsAI.ps1`. Run the installer again if you move the folder.
+1. Double-click `InstallWindowsAIWatcher.bat`. That step does not ask for admin approval.
+2. Leave this folder where it is. If you move it, run the installer again.
 
-The tasks run in your signed-in session, not as admin. They can read your policy values. Copilot is checked for all users when Windows allows that without admin, and otherwise for your user. Clicking **Yes** on the prompt runs `UpgradeWithoutAI.bat`, which is the same admin prompt as a manual run.
+The check runs after Windows finishes an update, when you sign in, and once a day if those did not run. It does not turn off Defender or Windows Update. It does not remove Phi Silica or OneDrive Summarize.
 
-Triggers:
+You only see a message when something this tool turns off is back on. Click **Yes** to run `UpgradeWithoutAI.bat` again. Windows asks for administrator approval only then. Click **No** and the same reminder waits until the next day.
 
-- **Windows Update finished.** Event 19, "Installation successful," in `Microsoft-Windows-WindowsUpdateClient/Operational`. The task waits 3 minutes. This is the post-update check. One update can write event 19 several times, so the same result prompts at most once every 3 hours.
-- **Sign-in**, after 2 minutes. A feature update often reboots, and the event can also fire while you are signed out. A prompt needs your session, so sign-in covers that.
-- **Daily at 9:15** local time, with up to 30 minutes of random delay. This runs when the event trigger does not. Sign-in and daily checks repeat the same result only after 20 hours. A new difference prompts right away.
+A burst of update notices only checks once. Signing in after an update still checks, because a restart can bring features back. The daily check does nothing if a check already ran in the last 12 hours.
 
-Click **No** to be reminded later. That is not the same as turning the features back on. `RestoreWindowsAI.bat` writes `C:\ProgramData\UpgradeWithoutAI\user-restored.marker`. While that file exists, the watcher does not prompt. `UpgradeWithoutAI.bat` deletes the marker when it applies the policies again.
+`RestoreWindowsAI.bat` stops the reminders until you turn AI off again. It writes `C:\ProgramData\UpgradeWithoutAI\user-restored.marker`. Turning AI off again deletes that file.
 
-On Home, some policy values never stick. The watcher will keep seeing those as drifted. Uninstall it if that reminder is not useful.
+On Home, some settings never stay off. You may see the same reminder after updates. Double-click `UninstallWindowsAIWatcher.bat` if you do not want it.
 
-Remove the tasks with `UninstallWindowsAIWatcher.bat`. To check once yourself, double-click `CheckWindowsAI.bat`. A clean check exits 0. Drift exits 2. The log is `%LOCALAPPDATA%\UpgradeWithoutAI\watcher.log`.
+To check now, double-click `CheckWindowsAI.bat`. Nothing to report exits 0. Something back on exits 2. The log is `%LOCALAPPDATA%\UpgradeWithoutAI\watcher.log`.
 
-If the event trigger cannot be registered, the installer still adds the sign-in and daily tasks and says so.
+The check looks at your signed-in account. It does not ask for admin approval to look. Yes on the message is what runs the full turn-off script.
 
 ## What it changes
 
