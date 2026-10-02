@@ -696,6 +696,122 @@ Describe "check stays unelevated and public copy stays a report" {
     }
 }
 
+Describe "launch readiness" {
+    It "keeps the Settings guide for Explorer AI actions, agentic features, and OneDrive Summarize" {
+        $report = Format-WindowsAIManualReport
+        $readme = Get-Content -LiteralPath (Join-Path $script:RepoRoot "README.md") -Raw
+        $prompt = Get-WindowsAIDriftPromptText -Findings @([pscustomobject]@{ Message = "example drift" })
+        $items = @(Get-WindowsAIManualItems)
+        $titles = @(
+            "File Explorer AI actions"
+            "Experimental agentic features"
+            "OneDrive Summarize"
+        )
+
+        foreach ($title in $titles) {
+            $item = @($items | Where-Object { $_.Title -eq $title })
+            $item.Count | Should -Be 1
+            $report.Contains($item[0].Title) | Should -BeTrue
+            $report.Contains($item[0].WhatItDoes) | Should -BeTrue
+            $readme.Contains("### $($item[0].Title)") | Should -BeTrue
+            $readme.Contains($item[0].WhatItDoes) | Should -BeTrue
+            foreach ($step in @($item[0].TurnOff + $item[0].TurnOn)) {
+                $report.Contains($step) | Should -BeTrue
+                $readme.Contains($step) | Should -BeTrue
+            }
+        }
+
+        $honesty = @(
+            "Select Apps, then Actions."
+            "Turn off each action you do not want. If every action is off, File Explorer stops offering those AI actions."
+            "Turn off Experimental agentic features."
+            "Windows has no Settings switch for Summarize alone, and this tool does not have a registry setting that turns it off."
+            "They stay available while that account is signed in."
+        )
+        foreach ($line in $honesty) {
+            $report.Contains($line) | Should -BeTrue
+            $readme.Contains($line) | Should -BeTrue
+        }
+
+        foreach ($text in @($report, $readme, $prompt)) {
+            $text | Should -Not -Match "OneDrive Summarize is removed"
+            $text | Should -Not -Match "removed OneDrive Summarize"
+            $text | Should -Not -Match "turns off OneDrive Summarize"
+            $text | Should -Not -Match "disables OneDrive Summarize"
+            $text | Should -Not -Match "Phi Silica is removed"
+            $text | Should -Not -Match "removed Phi Silica"
+        }
+
+        $prompt | Should -Match "does not remove Phi Silica or OneDrive Summarize"
+        $readme | Should -Match "It does not remove Phi Silica or OneDrive Summarize"
+    }
+
+    It "points each double-click helper at the script it should run" {
+        $expected = @(
+            [pscustomobject]@{ Bat = "InstallWindowsAIWatcher.bat"; Script = "Install-WindowsAIWatcher.ps1"; Also = @(); Absent = @("Disable-WindowsAI.ps1", "Restore-WindowsAI.ps1", "Watch-WindowsAI.ps1") }
+            [pscustomobject]@{ Bat = "UninstallWindowsAIWatcher.bat"; Script = "Install-WindowsAIWatcher.ps1"; Also = @("-Uninstall"); Absent = @("Disable-WindowsAI.ps1", "Restore-WindowsAI.ps1", "Watch-WindowsAI.ps1") }
+            [pscustomobject]@{ Bat = "UpgradeWithoutAI.bat"; Script = "Disable-WindowsAI.ps1"; Also = @(); Absent = @("Restore-WindowsAI.ps1", "Install-WindowsAIWatcher.ps1", "Watch-WindowsAI.ps1") }
+            [pscustomobject]@{ Bat = "RestoreWindowsAI.bat"; Script = "Restore-WindowsAI.ps1"; Also = @(); Absent = @("Disable-WindowsAI.ps1", "Install-WindowsAIWatcher.ps1", "Watch-WindowsAI.ps1") }
+            [pscustomobject]@{ Bat = "CheckWindowsAI.bat"; Script = "Watch-WindowsAI.ps1"; Also = @("-Source Manual"); Absent = @("Disable-WindowsAI.ps1", "Restore-WindowsAI.ps1", "Install-WindowsAIWatcher.ps1") }
+        )
+
+        foreach ($row in $expected) {
+            $text = Get-Content -LiteralPath (Join-Path $script:RepoRoot $row.Bat) -Raw
+            $text | Should -Match [regex]::Escape($row.Script)
+            $text | Should -Match '%~dp0'
+            foreach ($extra in @($row.Also)) {
+                if ([string]::IsNullOrEmpty($extra)) { continue }
+                $text.Contains($extra) | Should -BeTrue
+            }
+            foreach ($absent in @($row.Absent)) {
+                $text.Contains($absent) | Should -BeFalse
+            }
+        }
+
+        $installer = Get-Content -LiteralPath (Join-Path $script:RepoRoot "Install-WindowsAIWatcher.ps1") -Raw
+        $installer | Should -Match "UninstallWindowsAIWatcher\.bat"
+        $installer | Should -Match "Get-WindowsAIWatcherTaskDefinition"
+        $installer | Should -Match "does not disable Defender or Windows Update"
+        $installer | Should -Not -Match "Set-Dword"
+        $installer | Should -Not -Match "Disable-WindowsAI"
+        $installer | Should -Not -Match "DisableAntiSpyware"
+        $installer | Should -Not -Match "NoAutoUpdate"
+    }
+
+    It "keeps the public README a scan report with no pricing or paid-flow language" {
+        $readme = Get-Content -LiteralPath (Join-Path $script:RepoRoot "README.md") -Raw
+        $lower = $readme.ToLower()
+        $banned = @(
+            "pricing", "price", "purchase", "checkout", "subscribe", "subscription",
+            "payment", "paid", "buy now", "fee", "invoice", "premium", "monetiz",
+            "store listing", "partner center", "9.99", '$'
+        )
+        foreach ($word in $banned) {
+            $lower.Contains($word) | Should -BeFalse
+        }
+        $readme | Should -Not -Match '\$\s*\d'
+        $readme | Should -Not -Match '\b\d+\.\d{2}\b'
+        $readme | Should -Match "CheckWindowsAI\.bat"
+        $readme | Should -Match "Nothing to report exits 0"
+        $readme | Should -Match "## Still manual"
+        $readme.Contains("INTERNAL-LAUNCH-CHECKLIST") | Should -BeFalse
+
+        $checklistPath = Join-Path $script:RepoRoot "docs/INTERNAL-LAUNCH-CHECKLIST.md"
+        Test-Path -LiteralPath $checklistPath | Should -BeTrue
+        $checklist = Get-Content -LiteralPath $checklistPath -Raw
+        $checklist | Should -Match "Maintainers only"
+        $checklist | Should -Match "GitHub Release only"
+        $checklist | Should -Match "v0\.2\.2 already counts as launched"
+        $checklist | Should -Match "Do not soft-announce"
+        $checklist | Should -Match "Do not submit this tool to the Microsoft Store"
+        $checklist | Should -Match "Do not buy a domain"
+        $checklist | Should -Match "Do not spend money"
+        $checklist | Should -Match "free scan report"
+        $checklist | Should -Not -Match '\$\s*\d'
+        $checklist | Should -Not -Match "9\.99"
+    }
+}
+
 Describe "script files parse" {
     It "parses the watcher and installer, and dot-sourcing the watcher does not run a check" {
         $files = @(
