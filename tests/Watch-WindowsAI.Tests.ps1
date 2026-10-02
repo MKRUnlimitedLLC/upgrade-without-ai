@@ -488,7 +488,7 @@ Describe "prompt text" {
         $text | Should -Match "Phi Silica"
         $text | Should -Match "OneDrive Summarize"
         $text | Should -Match "Click Yes"
-        $text | Should -Match "Restore Windows AI"
+        $text | Should -Match "RestoreWindowsAI\.bat"
         $text | Should -Match "example drift"
         $text | Should -Not -Match "Phi Silica is removed"
         $text | Should -Not -Match "removed Phi Silica"
@@ -500,6 +500,31 @@ Describe "prompt text" {
             [pscustomobject]@{ Label = "Copilot"; Message = "user" }
         )
         @($deduped -split "`n" | Where-Object { $_ -eq "- Copilot" }).Count | Should -Be 1
+    }
+}
+
+Describe "check report" {
+    It "tells a person the result in plain language" {
+        (Get-WindowsAIWatchReportLine -Reason "Clean") | Should -Be "Nothing this tool turns off is back on."
+        (Get-WindowsAIWatchReportLine -Reason "Drift") | Should -Be "Something this tool turns off is back on."
+        (Get-WindowsAIWatchReportLine -Reason "UserRestored") | Should -Be "Windows AI was restored on purpose. Not checking and not asking."
+        (Get-WindowsAIWatchStartLine -Source "Manual") | Should -Be "Checking the AI features this tool turns off."
+
+        $lines = New-Object System.Collections.Generic.List[string]
+        $decision = Invoke-WindowsAIWatch `
+            -Source "Manual" `
+            -ScriptRoot $script:RepoRoot `
+            -NowUtc ([datetime]::Parse("2026-06-01T12:00:00Z")) `
+            -GetPolicyValue (New-PolicyReader -Values (Get-CleanPolicyValues)) `
+            -GetCopilotPackages { @() } `
+            -TestUserRestored { $false } `
+            -ReadState { $null } `
+            -WriteState { param($Fingerprint, $LastNotifiedUtc, $LastCheckedUtc, $LastSource) } `
+            -WriteLog { param($Message) [void]$lines.Add($Message) } `
+            -Prompt { param($Findings) throw "prompt should not run" }
+        $decision.Reason | Should -Be "Clean"
+        ($lines -join "`n").Contains("Nothing this tool turns off is back on.") | Should -BeTrue
+        ($lines -join "`n").Contains("Reason=") | Should -BeFalse
     }
 }
 
@@ -615,7 +640,7 @@ Describe "check stays unelevated and public copy stays a report" {
         )
         # Task Scheduler uses a property named Subscription for the event query.
         # That is not a paid plan. These phrases are the ones that must not appear.
-        $banned = @("pricing", "store listing", "buy now", "monetiz", "paid plan", "paid version", "paid subscription")
+        $banned = @("pricing", "store listing", "buy now", "monetiz", "paid plan", "paid version", "paid subscription", "paid apply", "$9.99", "9.99")
         foreach ($file in $files) {
             $text = (Get-Content -LiteralPath (Join-Path $script:RepoRoot $file) -Raw).ToLower()
             foreach ($word in $banned) {

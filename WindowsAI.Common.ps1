@@ -72,6 +72,28 @@ function Get-WindowsAIWatcherCooldownHours {
     }
 }
 
+function Get-WindowsAIWatchStartLine {
+    param([string]$Source)
+    switch ($Source) {
+        "Update" { return "Checking the AI features this tool turns off, after Windows Update." }
+        "Logon" { return "Checking the AI features this tool turns off, at sign-in." }
+        "Daily" { return "Checking the AI features this tool turns off. This is the daily check." }
+        default { return "Checking the AI features this tool turns off." }
+    }
+}
+
+function Get-WindowsAIWatchReportLine {
+    param([string]$Reason)
+    switch ($Reason) {
+        "Clean" { return "Nothing this tool turns off is back on." }
+        "Drift" { return "Something this tool turns off is back on." }
+        "Cooldown" { return "Something is still back on. The reminder already showed today." }
+        "UserRestored" { return "Windows AI was restored on purpose. Not checking and not asking." }
+        "Skipped" { return "A recent check already covered this." }
+        default { return "Check finished." }
+    }
+}
+
 function Get-WindowsAISettingLabel {
     param([string]$Name)
     switch ($Name) {
@@ -407,7 +429,7 @@ function Get-WindowsAIDriftPromptText {
     [void]$lines.Add("Click Yes to run Upgrade without AI again. Windows will ask for administrator approval.")
     [void]$lines.Add("This does not turn off Defender or Windows Update, and it does not remove Phi Silica or OneDrive Summarize.")
     [void]$lines.Add("")
-    [void]$lines.Add("Click No to be reminded tomorrow. To leave them on and stop these reminders, double-click Restore Windows AI.")
+    [void]$lines.Add("Click No to be reminded tomorrow. To leave them on and stop these reminders, double-click RestoreWindowsAI.bat.")
     return ($lines -join [Environment]::NewLine)
 }
 
@@ -667,7 +689,7 @@ function Invoke-WindowsAIWatch {
         $NowUtc = [datetime]::UtcNow
     }
 
-    & $WriteLog ("Check started ({0})." -f $Source)
+    & $WriteLog (Get-WindowsAIWatchStartLine -Source $Source)
 
     # Restoring Windows AI is a choice. Do not read the registry or the Copilot app.
     $userRestored = [bool](& $TestUserRestored)
@@ -676,7 +698,7 @@ function Invoke-WindowsAIWatch {
         if ($prior -and -not [string]::IsNullOrWhiteSpace([string]$prior.Fingerprint)) {
             & $WriteState -Fingerprint "" -LastNotifiedUtc $null
         }
-        & $WriteLog "Windows AI was restored on purpose. Not checking and not asking."
+        & $WriteLog (Get-WindowsAIWatchReportLine -Reason "UserRestored")
         return [pscustomobject]@{
             ShouldNotify = $false
             ExitCode = 0
@@ -699,7 +721,7 @@ function Invoke-WindowsAIWatch {
     }
 
     if (Test-WindowsAIShouldSkipScan -Source $Source -LastCheckedUtc $lastChecked -LastSource $lastSource -NowUtc ([datetime]$NowUtc)) {
-        & $WriteLog "Skipped. A recent check already covered this."
+        & $WriteLog (Get-WindowsAIWatchReportLine -Reason "Skipped")
         return [pscustomobject]@{
             ShouldNotify = $false
             ExitCode = 0
@@ -725,7 +747,7 @@ function Invoke-WindowsAIWatch {
         -LastNotifiedUtc $lastNotified `
         -CooldownHours (Get-WindowsAIWatcherCooldownHours -Source $Source)
 
-    & $WriteLog ("Check finished. Reason={0}; findings={1}; notify={2}." -f $decision.Reason, @($decision.Findings).Count, $decision.ShouldNotify)
+    & $WriteLog (Get-WindowsAIWatchReportLine -Reason $decision.Reason)
     foreach ($finding in @($decision.Findings)) {
         if ($null -ne $finding) {
             & $WriteLog $finding.Message

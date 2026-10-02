@@ -13,10 +13,11 @@
   - At sign-in, delayed 2 minutes, after the desktop is up.
   - Daily at 9:15 local time, with a 30 minute random delay.
 
-  The update task repeats the same result only after 3 hours, so one update
-  session does not stack dialogs. Sign-in and daily tasks wait 20 hours.
-  A different result prompts right away. RestoreWindowsAI.bat writes
-  user-restored.marker, and every task stays quiet while that file exists.
+  A burst of update events checks once. Sign-in after an update still
+  checks. The daily check skips if anything ran in the last 12 hours.
+  The same result is asked about at most once a day. A different result
+  asks right away. RestoreWindowsAI.bat writes user-restored.marker,
+  and every task stays quiet while that file exists.
 
   If the event trigger cannot be registered, sign-in and daily tasks are still
   installed. This script does not disable Defender or Windows Update.
