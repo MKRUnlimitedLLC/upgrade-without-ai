@@ -15,11 +15,32 @@ Home is MKR Connect LLC, an incubator project of MKR-UNLIMITED LLC. Not its own 
 3. Approve the Windows admin prompt.
 4. Read the summary. Restart when it asks.
 
-To undo: double-click `RestoreWindowsAI.bat`, then restart.
+To undo: double-click `RestoreWindowsAI.bat`, then restart. That also tells the post-update watcher to stay quiet until you apply this tool again.
 
 A log and per-key registry backups are written to `C:\ProgramData\UpgradeWithoutAI`. The script reads every policy value back before it reports success. If a write does not stick, the window stays open and the exit code is 1.
 
 Sign out or restart after it finishes. It does not restart Explorer. Restarting Explorer from the admin prompt can leave the shell running as administrator.
+
+## After Windows Update
+
+Windows Update can turn these AI features back on, or install the Copilot app again.
+
+1. Double-click `InstallWindowsAIWatcher.bat`. That step does not ask for admin approval.
+2. Leave this folder where it is. If you move it, run the installer again.
+
+The check runs after Windows finishes an update, when you sign in, and once a day if those did not run. It does not turn off Defender or Windows Update. It does not remove Phi Silica or OneDrive Summarize.
+
+You only see a message when something this tool turns off is back on. Click **Yes** to run `UpgradeWithoutAI.bat` again. Windows asks for administrator approval only then. Click **No** and the same reminder waits until the next day.
+
+A burst of update notices only checks once. Signing in after an update still checks, because a restart can bring features back. The daily check does nothing if a check already ran in the last 12 hours.
+
+`RestoreWindowsAI.bat` stops the reminders until you turn AI off again. It writes `C:\ProgramData\UpgradeWithoutAI\user-restored.marker`. Turning AI off again deletes that file.
+
+On Home, some settings never stay off. You may see the same reminder after updates. Double-click `UninstallWindowsAIWatcher.bat` if you do not want it.
+
+To check now, double-click `CheckWindowsAI.bat`. Nothing to report exits 0. Something back on exits 2. The log is `%LOCALAPPDATA%\UpgradeWithoutAI\watcher.log`.
+
+The check looks at your signed-in account. It does not ask for admin approval to look. Yes on the message is what runs the full turn-off script.
 
 ## What it changes
 
@@ -43,6 +64,18 @@ Sign out or restart after it finishes. It does not restart Explorer. Restarting 
 ## Requirements
 
 Windows 11 24H2 or newer. An administrator account. Pro, Enterprise, and Education honor the policy keys. Home gets the app removal, the taskbar hide, and the Recall feature removal when those pieces exist.
+
+## Tests
+
+The checks are Pester tests. They mock registry and AppX reads. They do not need a Windows Update, and they do not change the policy values in `Disable-WindowsAI.ps1`.
+
+With PowerShell 7:
+
+```
+pwsh -NoProfile -File ./tests/Run-Tests.ps1
+```
+
+That installs Pester 5 for the current user if it is missing, then runs `Invoke-Pester` on `./tests`. GitHub Actions runs the same script.
 
 ## License
 

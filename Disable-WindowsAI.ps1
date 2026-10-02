@@ -43,6 +43,16 @@ function Write-Log {
 Write-Log "Upgrade without AI started."
 Write-Log ("Edition {0}; build {1}" -f (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion").EditionID, [Environment]::OSVersion.Version.Build)
 
+$restoredMarker = Join-Path $logDir "user-restored.marker"
+if (Test-Path $restoredMarker) {
+    Remove-Item $restoredMarker -Force -ErrorAction SilentlyContinue
+    if (Test-Path $restoredMarker) {
+        Write-Log "Could not clear user-restored marker. The watcher may stay quiet."
+    } else {
+        Write-Log "Cleared user-restored marker. The post-update watcher will report drift again."
+    }
+}
+
 function Export-IfPresent {
     param([string]$Key, [string]$OutFile)
     & reg.exe query $Key 1>$null 2>$null
