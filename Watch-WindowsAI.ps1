@@ -64,6 +64,8 @@ if (-not $dotSourced) {
     }
     if ($Source -eq "Manual" -and -not $Quiet) {
         Write-Host ""
+        Write-Host (Format-WindowsAIScanReport)
+        Write-Host ""
         Write-Host (Format-WindowsAIManualReport)
     }
     if ($PassThru) {

@@ -538,6 +538,7 @@ Describe "manual settings steps" {
         $titles | Should -Contain "OneDrive Summarize"
         $titles | Should -Contain "Phi Silica and other on-device models"
         $titles | Should -Contain "Windows settings backup on a work PC"
+        $titles | Should -Contain "Copilot key remap"
 
         $report = Format-WindowsAIManualReport
         $report | Should -Match "Still manual"
@@ -564,12 +565,16 @@ Describe "manual settings steps" {
         $watch = Get-Content -LiteralPath (Join-Path $script:RepoRoot "Watch-WindowsAI.ps1") -Raw
         $disable = Get-Content -LiteralPath (Join-Path $script:RepoRoot "Disable-WindowsAI.ps1") -Raw
         $readme.Contains("## Still manual") | Should -BeTrue
+        $readme.Contains("## What the check reports") | Should -BeTrue
         $readme.Contains("Select Apps, then Actions.") | Should -BeTrue
+        $readme.Contains("Select Bluetooth & devices, then Keyboard.") | Should -BeTrue
         $readme.Contains("does not have a registry setting that turns it off.") | Should -BeTrue
         $readme.Contains("This tool does not remove Phi Silica.") | Should -BeTrue
         $readme | Should -Not -Match "Phi Silica is removed"
         $watch.Contains("Format-WindowsAIManualReport") | Should -BeTrue
+        $watch.Contains("Format-WindowsAIScanReport") | Should -BeTrue
         $disable.Contains("Format-WindowsAIManualReport") | Should -BeTrue
+        $disable.Contains("Format-WindowsAIScanReport") | Should -BeTrue
         $disable.Contains("Set-Dword") | Should -BeTrue
     }
 }
@@ -809,6 +814,106 @@ Describe "launch readiness" {
         $checklist | Should -Match "free scan report"
         $checklist | Should -Not -Match '\$\s*\d'
         $checklist | Should -Not -Match "9\.99"
+    }
+}
+
+Describe "26H2 scan map" {
+    It "keeps documented policy writes and refuses invented 26H2 flips" {
+        $names = @((Get-WindowsAIExpectedPolicy) | ForEach-Object { $_.Name })
+        $names | Should -Contain "AllowRecallEnablement"
+        $names | Should -Contain "DisableAIDataAnalysis"
+        $names | Should -Contain "DisableClickToDo"
+        $names | Should -Contain "DisableSettingsAgent"
+        $names | Should -Contain "RemoveMicrosoftCopilotApp"
+        $names | Should -Contain "TurnOffWindowsCopilot"
+        $names | Should -Contain "DisableCocreator"
+        $names | Should -Contain "DisableGenerativeFill"
+        $names | Should -Contain "DisableImageCreator"
+        $names | Should -Contain "ShowCopilotButton"
+
+        $notWritten = @(
+            "ConfigureAgentConnectors"
+            "AgentConsentDuration"
+            "AgentConnectorAccessPolicy"
+            "OnDeviceRegistryLoggingLevel"
+            "SetCopilotHardwareKey"
+            "CopilotKey"
+        )
+        foreach ($name in $notWritten) {
+            $names | Should -Not -Contain $name
+        }
+
+        $disable = Get-Content -LiteralPath (Join-Path $script:RepoRoot "Disable-WindowsAI.ps1") -Raw
+        $restore = Get-Content -LiteralPath (Join-Path $script:RepoRoot "Restore-WindowsAI.ps1") -Raw
+        foreach ($name in $notWritten) {
+            $disable.Contains($name) | Should -BeFalse
+            $restore.Contains($name) | Should -BeFalse
+        }
+        $disable | Should -Not -Match "Bluetooth & devices"
+    }
+
+    It "prints guide and unknown notes without claiming a detection or a removal" {
+        $scan = Format-WindowsAIScanReport
+        $readme = Get-Content -LiteralPath (Join-Path $script:RepoRoot "README.md") -Raw
+        $manual = Format-WindowsAIManualReport
+        $lines = @(Get-WindowsAIScanLines)
+
+        $scan | Should -Match "Scan notes"
+        $scan | Should -Match "This tool did not switch these"
+        foreach ($line in $lines) {
+            $scan.Contains($line) | Should -BeTrue
+            $readme.Contains($line) | Should -BeTrue
+        }
+
+        $scan | Should -Match "Home may ignore some policy values"
+        $scan | Should -Match "Settings > Bluetooth & devices > Keyboard"
+        $scan | Should -Match "guide only"
+        $scan | Should -Match "does not write a policy or registry value for that remap"
+        $scan | Should -Match "OneDrive and SharePoint"
+        $scan | Should -Match "no registry setting that turns that summarize action off"
+        $scan | Should -Match "Voice access natural-language commanding"
+        $scan | Should -Match "No documented disable policy was found"
+        $scan | Should -Match "NPU utilization and memory"
+        $scan | Should -Match "not a switch"
+        $scan | Should -Match "AI component version: not checked"
+        $scan | Should -Match "1\.2608\.951\.0"
+        $scan | Should -Match "Image Search, Content Extraction, Semantic Analysis, and Settings Model"
+        $scan | Should -Match "Copilot\+ PCs"
+        $scan | Should -Match "No documented query for the installed version was found"
+        $scan | Should -Match "does not read one"
+        $scan | Should -Match "24H2 Home and Pro editions reach end of updates on October 13, 2026"
+        $scan | Should -Match "does not change Windows Update"
+        $scan | Should -Match "does not treat the machine value as removed"
+        $scan | Should -Match "No Recall, Phi Silica, or Copilot-app policy was added"
+
+        $copilotKey = @((Get-WindowsAIManualItems) | Where-Object { $_.Title -eq "Copilot key remap" })
+        $copilotKey.Count | Should -Be 1
+        $manual.Contains($copilotKey[0].WhatItDoes) | Should -BeTrue
+        $manual.Contains("Select Bluetooth & devices, then Keyboard.") | Should -BeTrue
+        $manual.Contains("this tool cannot create it") | Should -BeTrue
+        $manual.Contains("does not write one") | Should -BeTrue
+
+        $explorer = @((Get-WindowsAIManualItems) | Where-Object { $_.Title -eq "File Explorer AI actions" })
+        $explorer[0].WhatItDoes | Should -Match "OneDrive and SharePoint"
+        $explorer[0].WhatItDoes | Should -Match "no registry setting that turns that summarize action off"
+        ($explorer[0].TurnOff -join " ") | Should -Match "Select Apps, then Actions"
+
+        foreach ($text in @($scan, $readme, $manual)) {
+            $text | Should -Not -Match "installed version is 1\.2608\.951\.0"
+            $text | Should -Not -Match "detected version"
+            $text | Should -Not -Match "Phi Silica is removed"
+            $text | Should -Not -Match "removed Phi Silica"
+            $text | Should -Not -Match "OneDrive Summarize is removed"
+            $text | Should -Not -Match "removed OneDrive Summarize"
+            $text | Should -Not -Match "turns off OneDrive Summarize"
+            $text | Should -Not -Match "disables OneDrive Summarize"
+            $text | Should -Not -Match "blocked via registry"
+            $text | Should -Not -Match "Voice access is disabled"
+            $text | Should -Not -Match "turns off Voice access"
+            $text | Should -Not -Match "Copilot key was remapped"
+            $text | Should -Not -Match "remapped the Copilot key"
+            $text | Should -Not -Match "Set-Dword"
+        }
     }
 }
 

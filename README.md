@@ -38,7 +38,31 @@ A burst of update notices only checks once. Signing in after an update still che
 
 On Home, some settings never stay off. You may see the same reminder after updates. Double-click `UninstallWindowsAIWatcher.bat` if you do not want it.
 
-To check now, double-click `CheckWindowsAI.bat`. The window says whether anything this tool turns off is back on, then lists the items you still turn on or off yourself. Nothing to report exits 0. Something back on exits 2. The log is `%LOCALAPPDATA%\UpgradeWithoutAI\watcher.log`.
+To check now, double-click `CheckWindowsAI.bat`. The window says whether anything this tool turns off is back on, prints the scan notes, then lists the items you still turn on or off yourself. Nothing to report exits 0. Something back on exits 2. The log is `%LOCALAPPDATA%\UpgradeWithoutAI\watcher.log`.
+
+## What the check reports
+
+These notes are printed by the check and by `UpgradeWithoutAI.bat`. They are not switches this tool flips. Home may ignore some policy values.
+
+Scan map checked 2026-10-05. Home may ignore some policy values.
+
+The value names this tool writes are still listed in the Windows 11 26H2 Group Policy Settings Reference and in WindowsCopilot.admx: AllowRecallEnablement, DisableAIDataAnalysis, DisableClickToDo, DisableSettingsAgent, RemoveMicrosoftCopilotApp, TurnOffWindowsCopilot, DisableCocreator, DisableGenerativeFill, and DisableImageCreator. None of those names was dropped from that reference.
+
+The 26H2 reference lists TurnOffWindowsCopilot as a user value. This tool still writes that user value and the machine value it already wrote. It does not treat the machine value as removed.
+
+This tool does not write the 26H2 values ConfigureAgentConnectors, AgentConsentDuration, AgentConnectorAccessPolicy, or OnDeviceRegistryLoggingLevel. No Recall, Phi Silica, or Copilot-app policy was added from this check.
+
+Copilot key remap is guide only. KB5124010 documents a setting that remaps the Copilot key to Right Ctrl or the Context Menu key, at Settings > Bluetooth & devices > Keyboard when it is available. This tool does not write a policy or registry value for that remap.
+
+File Explorer AI actions, including summarizing OneDrive and SharePoint documents, are guide only. The Settings path remains Apps, then Actions. This tool has no registry setting that turns that summarize action off.
+
+Voice access natural-language commanding on supported Copilot+ PCs is info only. No documented disable policy was found, so this tool does not turn it off.
+
+Task Manager can show NPU utilization and memory on PCs with an NPU. That is visibility, not a switch, and this tool does not change it.
+
+AI component version: not checked. Microsoft documents version 1.2608.951.0 for Image Search, Content Extraction, Semantic Analysis, and Settings Model on Copilot+ PCs in KB5124010 and KB5124008. No documented query for the installed version was found, so this check does not read one.
+
+Windows 11, version 24H2 Home and Pro editions reach end of updates on October 13, 2026. Enterprise and Education editions remain supported until October 12, 2027. This check does not change Windows Update.
 
 The check looks at your signed-in account. It does not ask for admin approval to look. Yes on the message is what runs the full turn-off script.
 
@@ -60,7 +84,7 @@ These are on or off only when you do it. The check and `UpgradeWithoutAI.bat` pr
 
 ### File Explorer AI actions
 
-When this is on, right-clicking a file in File Explorer can offer an AI action, such as editing a photo or summarizing a document, without opening the file first.
+When this is on, right-clicking a file in File Explorer can offer an AI action, such as editing a photo or summarizing a document, without opening the file first. Windows 11, version 26H2 documents AI actions for supported images and for summarizing OneDrive and SharePoint documents. The Summarize action in Copilot can summarize those files without opening them. It requires Microsoft 365 Copilot. This tool has no registry setting that turns that summarize action off.
 
 Turn off:
 
@@ -124,7 +148,7 @@ Turn on:
 
 ### Windows settings backup on a work PC
 
-On a work PC signed in with Microsoft Entra, Windows can save your settings and put them on another PC. When that backup is on, a new PC can come back with the old preferences. An administrator decides whether backup is allowed. This tool does not change that policy.
+On a work PC signed in with Microsoft Entra, Windows can save your settings and put them on another PC. When that backup is on, a new PC can come back with the old preferences. An administrator decides whether backup is allowed. Windows 11, version 26H2 enables Windows settings backup by default for eligible devices when an administrator has not already set the policy. Existing administrator-configured policies are still honored. This tool does not change that policy.
 
 Turn off:
 
@@ -137,6 +161,22 @@ Turn on:
 1. Press Windows+I to open Settings.
 2. Select Accounts, then Windows backup.
 3. Turn on Remember my preferences if Windows lets you. If the switch is missing, ask your administrator.
+
+### Copilot key remap
+
+KB5124010 (OS builds 26300.9550, 26200.9550, and 26100.9550) documents a Windows 11 setting that remaps the Copilot key so it can act as Right Ctrl or the Context Menu key. The Microsoft support article for that key says the setting is at Settings > Bluetooth & devices > Keyboard when it is available. This tool does not write a policy or registry value for that remap. SetCopilotHardwareKey only chooses which app opens, and this tool does not set it.
+
+Turn off:
+
+1. Press Windows+I to open Settings.
+2. Select Bluetooth & devices, then Keyboard.
+3. If Windows shows a setting to remap the Copilot key, choose Right Ctrl or Context Menu. If that setting is not there, this tool cannot create it.
+
+Turn on:
+
+1. Press Windows+I to open Settings.
+2. Select Bluetooth & devices, then Keyboard.
+3. If you changed the Copilot key and Windows still shows that setting, pick the choice you want. This tool does not know a documented registry value that puts the key back, and it does not write one.
 
 ## Requirements
 
