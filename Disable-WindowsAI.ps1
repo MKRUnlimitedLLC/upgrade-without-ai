@@ -177,6 +177,8 @@ $common = Join-Path $PSScriptRoot "WindowsAI.Common.ps1"
 if (Test-Path -LiteralPath $common) {
     . $common
     Write-Host ""
+    Write-Host (Format-WindowsAIScanReport)
+    Write-Host ""
     Write-Host (Format-WindowsAIManualReport)
     Write-Host ""
 }
